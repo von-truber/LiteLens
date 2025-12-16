@@ -1,2 +1,2 @@
-# litelens
+# LiteLens
 Photography Community app
