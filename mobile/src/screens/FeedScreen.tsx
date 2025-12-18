@@ -1,12 +1,29 @@
-import React, { useRef, useState } from 'react';
-import { Image, FlatList, Pressable, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import { Image, FlatList, Pressable, RefreshControl, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { ScreenContainer } from '../components/ScreenContainer';
 import { colors, spacing, typography } from '../theme/colors';
-import { posts, commentsByPostId } from '../data/mockData';
+import { posts, alternatePosts, commentsByPostId } from '../data/mockData';
 import { Comment, Post, User } from '../models/types';
+import { addNotification } from '../state/notificationsStore';
+import { setViewedUserById } from '../state/profileStore';
+import { RootTabParamList } from '../navigation/RootNavigator';
 
 export const FeedScreen: React.FC = () => {
+  const [feedPosts, setFeedPosts] = useState<Post[]>(posts);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const handleRefresh = useCallback(() => {
+    setRefreshing(true);
+    // In a real app this would refetch from the backend.
+    // Here we swap between two mock sets to simulate new content.
+    setTimeout(() => {
+      setFeedPosts((current) => (current === posts ? alternatePosts : posts));
+      setRefreshing(false);
+    }, 800);
+  }, []);
+
   return (
     <ScreenContainer>
       <View style={styles.header}>
@@ -14,10 +31,18 @@ export const FeedScreen: React.FC = () => {
         <Text style={styles.subtitle}>Curated feed from photographers you follow</Text>
       </View>
       <FlatList
-        data={posts}
+        data={feedPosts}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.listContent}
         renderItem={({ item }) => <PostCard post={item} />}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={colors.primary}
+            colors={[colors.primary]}
+          />
+        }
       />
     </ScreenContainer>
   );
@@ -39,6 +64,7 @@ const currentUser: User = {
 };
 
 const PostCard: React.FC<PostCardProps> = ({ post }) => {
+  const navigation = useNavigation<any>();
   const hero = post.images[0];
   const [liked, setLiked] = useState(false);
   const [saved, setSaved] = useState(false);
@@ -72,12 +98,56 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
       };
       setLocalComments((prev) => [...prev, newComment]);
       setCommentText('');
+      addNotification({
+        type: 'comment',
+        actorName: currentUser.displayName,
+        targetPostTitle: post.title,
+        targetUserName: post.author.displayName,
+        message: `You commented on "${post.title}".`,
+      });
     }
+  };
+
+  const handleToggleLike = () => {
+    setLiked((prev) => {
+      const next = !prev;
+      if (next) {
+        addNotification({
+          type: 'like',
+          actorName: currentUser.displayName,
+          targetPostTitle: post.title,
+          targetUserName: post.author.displayName,
+          message: `You appreciated "${post.title}".`,
+        });
+      }
+      return next;
+    });
+  };
+
+  const handleToggleRepost = () => {
+    setReposted((prev) => {
+      const next = !prev;
+      if (next) {
+        addNotification({
+          type: 'repost',
+          actorName: currentUser.displayName,
+          targetPostTitle: post.title,
+          targetUserName: post.author.displayName,
+          message: `You reposted "${post.title}".`,
+        });
+      }
+      return next;
+    });
+  };
+
+  const handleOpenAuthorProfile = () => {
+    setViewedUserById(post.author.id);
+    navigation.navigate('Profile' as keyof RootTabParamList);
   };
 
   return (
     <View style={styles.postCard}>
-      <View style={styles.postHeader}>
+      <TouchableOpacity style={styles.postHeader} onPress={handleOpenAuthorProfile}>
         <View style={styles.avatar} />
         <View style={styles.postHeaderText}>
           <Text style={styles.authorName}>{post.author.displayName}</Text>
@@ -85,7 +155,7 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
             @{post.author.username} • {post.location ?? 'Unknown location'}
           </Text>
         </View>
-      </View>
+      </TouchableOpacity>
       <Pressable onPress={handleImageTap}>
         <View style={styles.imageWrapper}>
           <Image
@@ -138,7 +208,7 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
         <View style={styles.actionsRow}>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => setLiked((prev) => !prev)}
+            onPress={handleToggleLike}
           >
             <Text style={[styles.actionText, liked && styles.actionTextActive]}>
               {liked ? '♥ Liked' : '♡ Like'}
@@ -152,7 +222,7 @@ const PostCard: React.FC<PostCardProps> = ({ post }) => {
           </TouchableOpacity>
           <TouchableOpacity
             style={styles.actionButton}
-            onPress={() => setReposted((prev) => !prev)}
+            onPress={handleToggleRepost}
           >
             <Text style={[styles.actionText, reposted && styles.actionTextActive]}>
               ⤴ Repost

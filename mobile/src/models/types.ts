@@ -58,4 +58,17 @@ export type Challenge = {
   endsAt: string;
 };
 
+export type NotificationType = 'follow' | 'like' | 'comment' | 'repost';
+
+export type Notification = {
+  id: string;
+  type: NotificationType;
+  actorName: string;
+  targetUserName?: string;
+  targetPostTitle?: string;
+  message: string;
+  createdAt: string;
+  isRead: boolean;
+};
+
 
